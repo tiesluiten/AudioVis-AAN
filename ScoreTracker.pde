@@ -1,3 +1,8 @@
+/*
+*     Tracks and displays average spectrum
+*     values of low, middle, and high.
+*/
+
 import ddf.minim.*;
 import ddf.minim.analysis.*;
 
