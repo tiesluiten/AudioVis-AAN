@@ -38,8 +38,8 @@ https://en.wikipedia.org/wiki/Torus
 
 */
 int nClusters = 40;
-float rIn = 150.0;
-float rOut = 300.0; 
+int rIn = 150;
+int rOut = 300; 
 int nPhi = 25;
 int nTheta = 25;
 float[][] Phi = new float[nClusters][nPhi]; 
@@ -48,13 +48,12 @@ float relIntTheta = PI/nTheta;
 float relIntPhi = PI/nPhi; 
 //Each cluster has its one matrix of theta and phi variables, like a grid.  
 float[][][] Pts = new float[nClusters][2][nTheta*nPhi]; 
-float ANG = 0; 
+int INIT_FLAG = 0;
 
 //Variables related to the audio response
 int SIGN = 1; 
 int nSig = 5; 
 float[] AvgSigE = new float[nSig]; 
-float Tr = 0;
 int FLAG = 0; 
 int N = 0; 
 
@@ -64,13 +63,23 @@ float ampBuffer [] = new float[22];
 float ampAvg = 0;
 float bassOld = 0; 
 
+//Drawing vars
+color white = color(255,255,255);
+color purple = color(51,0,102);
+color red = color(153,0,0);
+color orange = color(255,128,0);
+color blue = color(175,225,255);
+int colorIndex = 0;
+float sAlpha = 0;
+float sW = 0;
+
 
 void setup() {
   //fullScreen might not work in 3D for every processing version
   //fullScreen(P3D);
   size(1000,1000,P3D);
   colorMode(RGB, 255,255,255,100);
-  frameRate(30);
+  frameRate(20);
   background(0);
   
   initPts(); 
@@ -82,10 +91,10 @@ void setup() {
   //Init new audio object, 44100 due to Shannon/Nyquist. 
   //Q: effectively, what do we see when we change 4096? 
   minim = new Minim(this);
-  in = minim.getLineIn(Minim.STEREO, 1024*4, 44100);
+  in = minim.getLineIn(Minim.STEREO, 4096, 44100);
   fft = new FFT(in.mix.size(), 44100);
   N = fft.specSize(); 
-  background(0);   
+  
 }
 
 /*
@@ -93,6 +102,7 @@ To get the opacity in 3D, use the Reddit answer
 https://www.reddit.com/r/processing/comments/6dtoq6/alpha_background_level_in_3d/
 */
 void draw() {
+  
   //using the magic hint() function get a opaque background. 
   float opac = random(10,50);
   fill(0,opac); 
@@ -101,8 +111,10 @@ void draw() {
   rect(0,0,width,height);
   hint(ENABLE_DEPTH_TEST);
   
-  fft.forward(in.mix);
+  //We not live in the corner
+  translate(width/2,height/2,0); 
   
+  fft.forward(in.mix);
   int sMax = 100; 
   int sMin = 0;
   //Init coorinate related variables.
@@ -196,7 +208,7 @@ void draw() {
   else{
     nClusters = 20;
   }
-  
+  //Let the first elements of the clusters be the leader of their group. 
   for(int c=0; c<nClusters; c++){
     relV = random(0.025);
     phi = Pts[c][0][0]-random(relV)*sigE+amp/10; 
@@ -284,13 +296,16 @@ void initPts(){
   float thetaOffset = 0;
   float phiOffset = 0;
   float rand = 0.5; 
-  // Create a linspaced theta and phi array per clusters
-  // Assuming they are the same length one loop suffices 
-  for(int c=0;c<nClusters; c++){
-    for(int i=0;i<nPhi;i++){
-      Phi[c][i] = (i*(relIntPhi)/nPhi)-c*relIntPhi+random(rand);
-      Theta[c][i] = (i*(relIntTheta)/nTheta)-c*relIntTheta+random(rand);
+  // Create a linspaced theta and phi array per cluster. 
+  // Assuming they are the same length one loop suffices, only the first time. 
+  if(INIT_FLAG == 0){
+    for(int c=0;c<nClusters; c++){
+      for(int i=0;i<nPhi;i++){
+        Phi[c][i] = (i*(relIntPhi)/nPhi)-c*relIntPhi+random(rand);
+        Theta[c][i] = (i*(relIntTheta)/nTheta)-c*relIntTheta+random(rand);
+      }
     }
+    INIT_FLAG = 1;
   }
   // Then init the first random set of Pts coords
   for(int c=0;c<nClusters; c++){
@@ -312,17 +327,10 @@ A point(end of a vector) is drawn based on its norm.
 The further away, the more opaque and smaller plus a special color assigned. 
 */
 void drawPt(float x, float y, float z, float sMax, float sMin){
-  color white = color(255,255,255);
-  color purple = color(51,0,102);
-  color red = color(153,0,0);
-  color orange = color(255,128,0);
-  color blue = color(175,225,255);
-  int colorIndex = 0;
-  float sAlpha = 0;
-  float sW = 0;
-  //Due to the computer grid, translate! 
-  pushMatrix();
-  translate(width/2,height/2,0);
+  
+  //Due to the computer grid, translate! However, better not here. 
+  //pushMatrix();
+  //translate(width/2,height/2,0);
   if(z>0){
     sMax = 0.5*sMax;
   }
@@ -331,7 +339,7 @@ void drawPt(float x, float y, float z, float sMax, float sMin){
   //Setting it to say 3,1 instead of 2,1 removes a bit of the "realism" 
   sW = int(map(getNorm(x,y,z),rOut-rIn,rIn+rOut,2,1)); 
   colorIndex = int(map(getNorm(x,y,z),rOut-rIn,rIn+rOut,0,10));
-  colorIndex = colorIndex + int(random(2));  
+  colorIndex += int(random(2));  
   if(colorIndex>6){
    stroke(purple,sAlpha); 
   }
@@ -358,7 +366,7 @@ void drawPt(float x, float y, float z, float sMax, float sMin){
   strokeWeight(sW);
   point(x,y,z);
 
-  popMatrix();  
+  //popMatrix();  
 }
 
 float getNorm(float x, float y, float z){
