@@ -3,20 +3,15 @@ Clusters of stars surrounding a portal respond to the music.
 by accident this turns out to be the COSMOS eye.  
 
 Open problem:
-The more cool stuff you add, the more lags you experience.
-At this point the animation is so wild that it is hard to see that actually the
-whole thing is very much behind. 
-Since must beats(the bass part) are similar throughout a song you will not quickly notice this problem. 
-Thus either the code must be more efficient, or the audio most be somehow predicted. 
+Overcoming inherent lags due to buffering and inefficient code(many particles). 
 ----------
 The idea is to have group of particles moving across a Torus,
-but not to draw them all. Efficiency is questionable, which
-is compensated with the ease of prototyping. 
+but not to draw them all at once. Efficiency is questionable, prototyping is easy. 
 
 Regarding the supposedely space pattern:
 The more particles, the better, visually.
 Computationally your computer might think differently.
-The hard work lies in nPhi*nTheta 
+The hard work lies in N_PHI*N_THETA 
 
 We use the very nice Minim lib:
 http://code.compartmental.net/minim/
@@ -27,6 +22,7 @@ import ddf.minim.*;
 import ddf.minim.analysis.*;
 
 Minim minim;
+// http://code.compartmental.net/minim/audioinput_class_audioinput.html
 AudioInput in;
 FFT fft;
 
@@ -37,29 +33,30 @@ phi and theta flipped:
 https://en.wikipedia.org/wiki/Torus
 
 */
-int nClusters = 40;
-int rIn = 150;
-int rOut = 300; 
-int nPhi = 25;
-int nTheta = 25;
-float[][] Phi = new float[nClusters][nPhi]; 
-float[][] Theta = new float[nClusters][nTheta];
-float relIntTheta = PI/nTheta;
-float relIntPhi = PI/nPhi; 
+int N_CLUSTERS = 40;
+int activeClusters = 40; 
+int R_IN = 150;
+int R_OUT = 300; 
+int N_PHI = 25;
+int N_THETA = 25;
+float[][] Phi = new float[N_CLUSTERS][N_PHI]; 
+float[][] Theta = new float[N_CLUSTERS][N_THETA];
+float relIntTheta = PI/N_THETA;
+float relIntPhi = PI/N_PHI; 
 //Each cluster has its one matrix of theta and phi variables, like a grid.  
-float[][][] Pts = new float[nClusters][2][nTheta*nPhi]; 
-int INIT_FLAG = 0;
+float[][][] Pts = new float[N_CLUSTERS][2][N_THETA*N_PHI]; 
+int initFlag = 0;
 
 //Variables related to the audio response
-int SIGN = 1; 
-int nSig = 5; 
+int sign = 1;
+//nSig was 5> 
+int nSig = 2; 
 float[] AvgSigE = new float[nSig]; 
 int FLAG = 0; 
 int N = 0; 
 
 float amp = 0;
 float maxAmp = 0;
-float ampBuffer [] = new float[22];
 float ampAvg = 0;
 float bassOld = 0; 
 
@@ -79,22 +76,20 @@ void setup() {
   //fullScreen(P3D);
   size(1000,1000,P3D);
   colorMode(RGB, 255,255,255,100);
-  frameRate(20);
+  //frameRate(30);
   background(0);
-  
   initPts(); 
-  
   //Init the signal energies
   for(int i=0; i<nSig; i++){
    AvgSigE[i] = 1;  
   }
-  //Init new audio object, 44100 due to Shannon/Nyquist. 
-  //Q: effectively, what do we see when we change 4096? 
+  //Init new audio object
   minim = new Minim(this);
-  in = minim.getLineIn(Minim.STEREO, 4096, 44100);
-  fft = new FFT(in.mix.size(), 44100);
-  N = fft.specSize(); 
-  
+  in = minim.getLineIn(Minim.STEREO, 512, 44100);
+  fft = new FFT(in.mix.size(), in.sampleRate());
+  N = fft.specSize();
+  //If somehow you need very specific frequency ranges, a proper window function might do the trick. 
+  //fft.window(FFT.HANN); 
 }
 
 /*
@@ -102,19 +97,21 @@ To get the opacity in 3D, use the Reddit answer
 https://www.reddit.com/r/processing/comments/6dtoq6/alpha_background_level_in_3d/
 */
 void draw() {
-  
   //using the magic hint() function get a opaque background. 
-  float opac = random(10,50);
+  int opac = int(random(10,50));
   fill(0,opac); 
   noStroke();
   hint(DISABLE_DEPTH_TEST);
   rect(0,0,width,height);
   hint(ENABLE_DEPTH_TEST);
-  
-  //We not live in the corner
+ 
+  fft.forward(in.mix);
+  //print("level: ", in.mix.level(), "\n"); 
+   
+  //We do not live in the upperleft corner
   translate(width/2,height/2,0); 
   
-  fft.forward(in.mix);
+  //sMax and sMin relate to particle opacity ranges(stroke)  
   int sMax = 100; 
   int sMin = 0;
   //Init coorinate related variables.
@@ -130,93 +127,66 @@ void draw() {
   
   float avgSigE = 0; 
   float sigE = 0;
+  //Assuming the "bass" lies within the 0-100Hz band. 
   float lower = 0;
   float upper = 100; 
   float bassCurr = fft.calcAvg(lower, upper);
   
-  //Calc the signal energy 
-    for(int i = 0; i < N; i++){
-      sigE += fft.getBand(i)/N;
-      //Uncomment line below to part of the freq spectrum. 
-      //line(i, height, i, height - fft.getBand(i)*2);
-    }
-    //Update the average signal energy
-    //which is useful in comparing with current signal. 
-    for(int i=nSig-1; i>0; i--){
-      AvgSigE[i] = AvgSigE[i-1];
-    }
-    AvgSigE[0] = sigE; 
-    
-    //Compute the avg E 
-    for(int i=0; i<nSig; i++){
-     avgSigE += AvgSigE[i]/nSig;  
-    }
-    
-    //Update the history of average bass
-    
-    //Compute the average bass 
-    
-    //Get the max amp from the buffer(the one we set) 
-    for(int i = 0; i < in.bufferSize() - 1; i++) {
-      if ( abs(in.mix.get(i)) > amp ) {
-        amp = abs(in.mix.get(i));
-      }
-    }
-    //Remember the max amp 
-    if(amp>maxAmp){
-     maxAmp = amp;  
-    }
+  sigE = fft.calcAvg(0,in.sampleRate()/2); 
+  //Update the average signal energy array 
+  //which is useful in comparing with current signal. 
+  for(int i=nSig-1; i>0; i--){
+    AvgSigE[i] = AvgSigE[i-1];
+  }
+  AvgSigE[0] = sigE; 
   
-    //Right not this is not used: 
-    //Determine the average amplitude of the input audio
-    //Using this is a better indication of changes in music then a fixed threshold 
-    /*
-    ampAvg = amp/ampBuffer.length;
-    for(int j=ampBuffer.length-1; j>0; j--){
-      ampBuffer[j]=ampBuffer[j-1];
-      ampAvg += (ampBuffer[j]/ampBuffer.length); 
-    }
-    ampBuffer[0]=amp;
-    */
-    
-    //Base stroke intensity on current amp  
-    sMax = int(map(amp,0,maxAmp,10,100));
-    
-    /*
-    Respond to the music
-    Completely arbitrary and tuned
-    */
-    if(bassCurr>2*bassOld){
-     FLAG=1; 
-    }
-    //Extremer bass
-    if(bassCurr>3*bassOld){
-     initPts();  
-    }
-    //Flip the direction 
-    if(sigE>1.15*avgSigE){
-      SIGN = SIGN*-1;
-    }
-    if(sigE <avgSigE){
-     FLAG = 0; 
-    }
+  //Compute the avg E 
+  for(int i=0; i<nSig; i++){
+   avgSigE += AvgSigE[i]/nSig;  
+  }
+  
+  //Base stroke intensity on the current Amplitude relative to previous ones. 
+  amp = abs(in.mix.get(in.bufferSize()-1)); 
+  if(amp>maxAmp){
+   maxAmp = amp;  
+  } 
+  sMax = int(map(amp,0,maxAmp,10,100));
+  
+  /*
+  Respond to the music.
+  Completely arbitrary and tuned towards what looks cool. 
+  */
+  if(bassCurr>2*bassOld){
+   FLAG=1; 
+  }
+  //Extremer bass
+  if(bassCurr>3*bassOld){
+   initPts();  
+  }
+  //Flip the direction 
+  if(sigE>1.15*avgSigE){
+    sign = sign*-1;
+  }
+  if(sigE <avgSigE){
+   FLAG = 0; 
+  }
   
   //To have a vivid canvas, let the music(bass) deceide how much to draw 
   if(FLAG == 1){
-    nClusters = 40;
+    activeClusters = N_CLUSTERS;
   }
   else{
-    nClusters = 20;
+    activeClusters = int(0.5*N_CLUSTERS);
   }
   //Let the first elements of the clusters be the leader of their group. 
-  for(int c=0; c<nClusters; c++){
+  for(int c=0; c<activeClusters; c++){
     relV = random(0.025);
     phi = Pts[c][0][0]-random(relV)*sigE+amp/10; 
     if(phi>2*PI){
       phi=phi-2*PI;
     }
     Pts[c][0][0] = phi;
-    theta = Pts[c][1][0]+random(2*relV)*SIGN*sigE+0.01*sigE*SIGN+SIGN*amp/100;
+    theta = Pts[c][1][0]+random(2*relV)*sign*sigE+0.01*sigE*sign+sign*amp/100;
     if(theta>2*PI){
       theta=theta-2*PI;
     }
@@ -224,9 +194,9 @@ void draw() {
   }
   //Let the rest follow the leader  
   //Yes, the velocity scaling is super random. 
-  for(int c=0; c<nClusters; c++){
+  for(int c=0; c<activeClusters; c++){
     relV = random(0.025); 
-    for(int k=1;k<nTheta*nPhi;k++){
+    for(int k=1;k<N_THETA*N_PHI;k++){
       //Check if the point is within the interval
       relDist = abs(Pts[c][0][k]-Pts[c][0][k-1]); 
       if(relDist<relIntPhi){
@@ -243,11 +213,11 @@ void draw() {
       //Same story for theta 
       relDist = abs(Pts[c][1][k]-Pts[c][1][k-1]); 
       if(relDist<relIntTheta){
-        theta = Pts[c][1][k]+random(2*relV)*SIGN*sigE+SIGN*amp/100; 
+        theta = Pts[c][1][k]+random(2*relV)*sign*sigE+sign*amp/100; 
       }
       //move towards the leader
       else{
-        theta = Pts[c][1][k]+(Pts[c][1][k-1]-Pts[c][1][k])*random(2*relV)*sigE*SIGN+0.01*sigE*SIGN+SIGN*amp/100;
+        theta = Pts[c][1][k]+(Pts[c][1][k-1]-Pts[c][1][k])*random(2*relV)*sigE*sign+0.01*sigE*sign+sign*amp/100;
       }
       if(theta>2*PI){
       theta=theta-2*PI;
@@ -255,9 +225,9 @@ void draw() {
       Pts[c][1][k] = theta;
       
       //From the phi and theta compute the x,y,z which we can draw. 
-      z = sin(phi)*rIn;
-      rExt = cos(phi)*rIn;
-      rEff = rOut+rExt+random(0.01); 
+      z = sin(phi)*R_IN;
+      rExt = cos(phi)*R_IN;
+      rEff = R_OUT+rExt+random(0.01); 
       
       x = rEff*cos(theta);
       y = rEff*sin(theta);
@@ -267,6 +237,7 @@ void draw() {
   //print("elapsed time: ", millis(), "(ms)\n");  
   //Mainly for debugging purposes 
   /*
+  translate(-width/2,-height/2,0);
   textSize( 18 );
   strokeWeight(2);
   stroke(255); 
@@ -280,9 +251,10 @@ void draw() {
   line(0,87,amp*100,87);
   text("Amp: "+ amp,5,105); 
   */
-  //reset amp and save the old bass
-  amp = 0; 
+  //Save the old bass and if you like, an image. 
   bassOld = bassCurr; 
+  //save("portal.tif");
+  //saveFrame();
 }
 
 /*
@@ -296,30 +268,27 @@ void initPts(){
   float thetaOffset = 0;
   float phiOffset = 0;
   float rand = 0.5; 
-  // Create a linspaced theta and phi array per cluster. 
-  // Assuming they are the same length one loop suffices, only the first time. 
-  if(INIT_FLAG == 0){
-    for(int c=0;c<nClusters; c++){
-      for(int i=0;i<nPhi;i++){
-        Phi[c][i] = (i*(relIntPhi)/nPhi)-c*relIntPhi+random(rand);
-        Theta[c][i] = (i*(relIntTheta)/nTheta)-c*relIntTheta+random(rand);
+  // Create a scene with randomly spaced clusters consisting of randomly spaced points.
+  // Create the Theta and Phi matrices/arrays just once. 
+    for(int c=0;c<N_CLUSTERS; c++){
+      thetaOffset = random(10);
+      phiOffset = random(10);
+      for(int i=0;i<N_THETA;i++){
+        if(initFlag == 0){
+        Theta[c][i] = (i*(relIntTheta)/N_THETA)-c*relIntTheta+random(rand);
+        }
+        for(int j=0;j<N_PHI;j++){
+          if(initFlag == 0 ){
+          Phi[c][j] = (j*(relIntPhi)/N_PHI)-c*relIntPhi+random(rand); 
+          }
+          Pts[c][0][k] = Phi[c][j]+phiOffset+random(rand);
+          Pts[c][1][k] = Theta[c][i]+thetaOffset+random(rand);
+          k+=1;
+        }
       }
+      k=0; 
     }
-    INIT_FLAG = 1;
-  }
-  // Then init the first random set of Pts coords
-  for(int c=0;c<nClusters; c++){
-    thetaOffset = random(10);
-    phiOffset = random(10);
-    for(int i=0;i<nTheta;i++){
-      for(int j=0;j<nPhi;j++){
-     Pts[c][0][k] = Phi[c][j]+phiOffset+random(rand);
-     Pts[c][1][k] = Theta[c][i]+thetaOffset+random(rand);
-     k+=1;
-      }
-    }
-    k=0; 
-  }
+    initFlag = 1;   
 }
 
 /*
@@ -334,11 +303,11 @@ void drawPt(float x, float y, float z, float sMax, float sMin){
   if(z>0){
     sMax = 0.5*sMax;
   }
-  sAlpha = int(map(getNorm(x,y,z),rOut-rIn,rIn+rOut,sMax,sMin)); 
+  sAlpha = int(map(getNorm(x,y,z),R_OUT-R_IN,R_IN+R_OUT,sMax,sMin)); 
   //sW is used for the strokeWeight();
   //Setting it to say 3,1 instead of 2,1 removes a bit of the "realism" 
-  sW = int(map(getNorm(x,y,z),rOut-rIn,rIn+rOut,2,1)); 
-  colorIndex = int(map(getNorm(x,y,z),rOut-rIn,rIn+rOut,0,10));
+  sW = int(map(getNorm(x,y,z),R_OUT-R_IN,R_IN+R_OUT,2,1)); 
+  colorIndex = int(map(getNorm(x,y,z),R_OUT-R_IN,R_IN+R_OUT,0,10));
   colorIndex += int(random(2));  
   if(colorIndex>6){
    stroke(purple,sAlpha); 
