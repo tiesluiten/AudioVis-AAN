@@ -4,6 +4,7 @@ by accident this turns out to be the COSMOS eye.
 
 Open problem:
 Overcoming inherent lags due to buffering and inefficient code(many particles). 
+Heavy music -> too wild reponse, especially the colour background. 
 ----------
 The idea is to have group of particles moving across a Torus,
 but not to draw them all at once. Efficiency is questionable, prototyping is easy. 
@@ -46,6 +47,7 @@ float relIntPhi = PI/N_PHI;
 //Each cluster has its one matrix of theta and phi variables, like a grid.  
 float[][][] Pts = new float[N_CLUSTERS][2][N_THETA*N_PHI]; 
 int initFlag = 0;
+int colourFlag = 0; 
 
 //Variables related to the audio response
 int sign = 1;
@@ -66,6 +68,7 @@ color purple = color(51,0,102);
 color red = color(153,0,0);
 color orange = color(255,128,0);
 color blue = color(175,225,255);
+color rand; 
 int colorIndex = 0;
 float sAlpha = 0;
 float sW = 0;
@@ -73,8 +76,8 @@ float sW = 0;
 
 void setup() {
   //fullScreen might not work in 3D for every processing version
-  //fullScreen(P3D);
-  size(1000,1000,P3D);
+  fullScreen(P3D);
+  //size(1000,1000,P3D);
   colorMode(RGB, 255,255,255,100);
   //frameRate(30);
   background(0);
@@ -99,7 +102,12 @@ https://www.reddit.com/r/processing/comments/6dtoq6/alpha_background_level_in_3d
 void draw() {
   //using the magic hint() function get a opaque background. 
   int opac = int(random(10,50));
-  fill(0,opac); 
+  if(colourFlag==1){
+    fill(rand,opac);
+  }
+  else{
+    fill(0,opac);
+  }
   noStroke();
   hint(DISABLE_DEPTH_TEST);
   rect(0,0,width,height);
@@ -163,6 +171,19 @@ void draw() {
   if(bassCurr>3*bassOld){
    initPts();  
   }
+  //Really Extreme bass, add some colour 
+  if(bassCurr>4*bassOld){
+    if(colourFlag == 0){
+    colourFlag = 1;
+    }
+    else{
+      colourFlag = 0;
+    } 
+    rand = color(int(random(122)),int(random(122)),int(random(122))); 
+  }
+  //else{
+  //  colourFlag = 0;
+  //}
   //Flip the direction 
   if(sigE>1.15*avgSigE){
     sign = sign*-1;
@@ -324,6 +345,12 @@ void drawPt(float x, float y, float z, float sMax, float sMin){
   else{
     stroke(blue,sAlpha);
   } 
+  
+  if(colourFlag==1){
+    //show the torus 
+    //sAlpha = 100; 
+   stroke(white,sAlpha);  
+  }
   
   strokeWeight(sW);
   point(x+random(0.01),y+random(0.01),z+random(0.01));
